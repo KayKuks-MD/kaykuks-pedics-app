@@ -35,28 +35,20 @@ height = st.number_input("Height (cm)", 40.0, 220.0)
 weight = st.number_input("Weight (kg)", 2.0, 200.0)
 
 # ============================================================
-# BMI
+# BMI (DISPLAY ONLY – NO ADULT INTERPRETATION)
 # ============================================================
 bmi = weight / ((height / 100) ** 2)
 st.subheader("📊 BMI")
 st.write(f"**BMI:** {bmi:.2f}")
-
-if bmi < 18.5:
-    st.info("Underweight")
-elif bmi < 25:
-    st.success("Normal weight")
-elif bmi < 30:
-    st.warning("Overweight")
-else:
-    st.error("Obese")
+st.info("BMI in children must be interpreted using BMI-for-age charts.")
 
 # ============================================================
-# HEIGHT FOR AGE Z SCORE
+# HEIGHT-FOR-AGE Z-SCORE (WHO TABLE LOOKUP)
 # ============================================================
 def get_height_zscore(age, sex, height):
-    age_months = age * 12
+    age_months = int(round(age * 12))
 
-    # Choose dataset
+    # Select correct dataset
     if age < 2:
         df = data["boys_0_2"] if sex == "Male" else data["girls_0_2"]
     elif age < 5:
@@ -64,66 +56,63 @@ def get_height_zscore(age, sex, height):
     else:
         df = data["boys_5_19"] if sex == "Male" else data["girls_5_19"]
 
-    # Normalize column names
+    # Clean column names
     df.columns = [c.strip().lower() for c in df.columns]
 
-    # ---- Detect age column ----
-    age_col = None
-    for col in df.columns:
-        if "age" in col or "month" in col:
-            age_col = col
-            break
+    # First column = age
+    age_col = df.columns[0]
 
-    if age_col is None:
-        st.error("❌ Could not find age column in WHO file.")
-        st.write("Columns found:", df.columns.tolist())
-        st.stop()
+    # Rename age column
+    df = df.rename(columns={age_col: "age_months"})
+    df["age_months"] = pd.to_numeric(df["age_months"], errors="coerce")
 
-    # Convert age to numeric
-    df[age_col] = pd.to_numeric(df[age_col], errors="coerce")
+    # Z-score columns
+    z_cols = {
+        -3: df.columns[1],
+        -2: df.columns[2],
+        -1: df.columns[3],
+         0: df.columns[4],
+         1: df.columns[5],
+         2: df.columns[6],
+         3: df.columns[7],
+    }
 
-    # ---- Detect LMS columns ----
-    def find_col(letter):
-        for c in df.columns:
-            if c.strip().lower() == letter:
-                return c
-        return None
-
-    L_col = find_col("l")
-    M_col = find_col("m")
-    S_col = find_col("s")
-
-    if not all([L_col, M_col, S_col]):
-        st.error("❌ WHO file must contain columns L, M, and S.")
-        st.write("Columns found:", df.columns.tolist())
-        st.stop()
-
-    # Find nearest age row
-    df["diff"] = (df[age_col] - age_months).abs()
+    # Find closest age row
+    df["diff"] = (df["age_months"] - age_months).abs()
     row = df.loc[df["diff"].idxmin()]
 
-    # LMS formula
-    L, M, S = row[L_col], row[M_col], row[S_col]
-    z = ((height / M) ** L - 1) / (L * S)
+    # Get heights at each Z
+    heights = {z: row[col] for z, col in z_cols.items()}
+
+    # Interpolate Z-score
+    z_scores = np.array(list(heights.keys()))
+    height_vals = np.array(list(heights.values()))
+
+    z = np.interp(height, height_vals, z_scores)
 
     return z
 
 # ============================================================
 # DISPLAY HEIGHT RESULT
 # ============================================================
-z = get_height_zscore(age, sex, height)
+try:
+    z = get_height_zscore(age, sex, height)
 
-st.subheader("📏 Height-for-Age (WHO Z-score)")
-st.write(f"**Z-score:** {z:.2f}")
+    st.subheader("📏 Height-for-Age (WHO Z-score)")
+    st.write(f"**Z-score:** {z:.2f}")
 
-if z < -3:
-    st.error("Severely stunted")
-elif z < -2:
-    st.warning("Stunted")
-elif z <= 2:
-    st.success("Normal height")
-else:
-    st.info("Tall for age")
+    if z < -3:
+        st.error("Severely stunted")
+    elif z < -2:
+        st.warning("Stunted")
+    elif z <= 2:
+        st.success("Normal height")
+    else:
+        st.info("Tall for age")
+
+except Exception as e:
+    st.error("Could not calculate height-for-age Z-score.")
+    st.write(e)
 
 # ============================================================
 # BLOOD PRESSURE
@@ -134,11 +123,14 @@ sbp = st.number_input("Systolic BP (mmHg)", 50, 200)
 dbp = st.number_input("Diastolic BP (mmHg)", 30, 150)
 
 if st.button("Interpret BP"):
-    if sbp < 90 and dbp < 60:
-        st.success("Normal blood pressure")
-    elif sbp < 120:
-        st.info("Elevated blood pressure")
-    elif sbp < 130:
-        st.warning("Stage 1 Hypertension")
+    if age >= 13:
+        if sbp < 120 and dbp < 80:
+            st.success("Normal BP")
+        elif sbp < 130:
+            st.warning("Elevated BP")
+        elif sbp < 140:
+            st.warning("Stage 1 Hypertension")
+        else:
+            st.error("Stage 2 Hypertension")
     else:
-        st.error("Stage 2 Hypertension")
+        st.info("BP interpretation for children <13 years requires age-, sex-, and height-based percentiles.")
