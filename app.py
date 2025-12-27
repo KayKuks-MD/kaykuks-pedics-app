@@ -120,4 +120,4 @@ def interpret_bp(sbp, dbp):
 if st.button("Interpret Blood Pressure"):
     st.success(f"Blood Pressure Category: **{interpret_bp(sbp, dbp)}**")
 
-st.caption("⚕️ Educational tool — not for diagnostic use.")
+st.caption("⚕️ Educational tool — not for diagnostic use.")j
