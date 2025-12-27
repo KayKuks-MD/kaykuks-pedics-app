@@ -2,13 +2,16 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 
+# ===============================
+# APP CONFIG
+# ===============================
 st.set_page_config(page_title="KayKuks Pediatric App", layout="centered")
 
 st.title("🧒 KayKuks Pediatric Growth & BP App")
 
-# ==============================
+# ===============================
 # LOAD WHO DATA
-# ==============================
+# ===============================
 @st.cache_data
 def load_data():
     return {
@@ -22,28 +25,28 @@ def load_data():
 
 data = load_data()
 
-# ==============================
-# INPUTS
-# ==============================
+# ===============================
+# USER INPUT
+# ===============================
 age = st.number_input("Age (years)", 0.0, 19.0, 5.0)
 sex = st.selectbox("Sex", ["Male", "Female"])
 height = st.number_input("Height (cm)", 40.0, 200.0)
 weight = st.number_input("Weight (kg)", 2.0, 150.0)
 
-# ==============================
+# ===============================
 # BMI
-# ==============================
-def calc_bmi(w, h):
-    return w / ((h / 100) ** 2)
+# ===============================
+def calculate_bmi(weight, height):
+    return weight / ((height / 100) ** 2)
 
-bmi = calc_bmi(weight, height)
+bmi = calculate_bmi(weight, height)
 st.subheader("📊 BMI")
 st.write(f"**BMI:** {bmi:.2f}")
 
-# ==============================
+# ===============================
 # HEIGHT-FOR-AGE Z SCORE
-# ==============================
-def get_hfa_z(age, sex, height):
+# ===============================
+def get_zscore(age, sex, height):
     age_months = int(age * 12)
 
     if age < 2:
@@ -53,34 +56,38 @@ def get_hfa_z(age, sex, height):
     else:
         df = data["boys_5_19"] if sex == "Male" else data["girls_5_19"]
 
-    row = df[df["Age"] == age_months]
+    # Detect age column automatically
+    age_col = df.columns[0]
 
-    if row.empty:
-        return None
+    # Find closest age row
+    df["diff"] = abs(df[age_col] - age_months)
+    row = df.sort_values("diff").iloc[0]
 
-    L, M, S = row.iloc[0]["L"], row.iloc[0]["M"], row.iloc[0]["S"]
+    L = row["L"]
+    M = row["M"]
+    S = row["S"]
+
     z = ((height / M) ** L - 1) / (L * S)
     return z
 
-z = get_hfa_z(age, sex, height)
+z = get_zscore(age, sex, height)
 
-if z is not None:
-    st.subheader("📏 Height-for-Age Z-Score")
-    st.write(f"Z-score: **{z:.2f}**")
+st.subheader("📏 Height-for-Age Z-Score")
+st.write(f"Z-score: **{z:.2f}**")
 
-    if z < -3:
-        st.error("Severe stunting")
-    elif z < -2:
-        st.warning("Stunted")
-    elif z <= 2:
-        st.success("Normal height")
-    else:
-        st.info("Tall for age")
+if z < -3:
+    st.error("Severe stunting")
+elif z < -2:
+    st.warning("Stunting")
+elif z <= 2:
+    st.success("Normal height for age")
+else:
+    st.info("Tall for age")
 
-# ==============================
-# BP (Simplified)
-# ==============================
-st.subheader("🩺 Blood Pressure (Screening)")
+# ===============================
+# BP SECTION
+# ===============================
+st.subheader("🩺 Blood Pressure Assessment")
 
 sbp = st.number_input("Systolic BP (mmHg)", 50, 200)
 dbp = st.number_input("Diastolic BP (mmHg)", 30, 150)
@@ -88,7 +95,7 @@ dbp = st.number_input("Diastolic BP (mmHg)", 30, 150)
 def interpret_bp(sbp, dbp):
     if sbp < 90 and dbp < 60:
         return "Normal"
-    elif sbp < 120 and dbp < 80:
+    elif sbp < 120 or dbp < 80:
         return "Elevated"
     elif sbp < 130 or dbp < 80:
         return "Stage 1 Hypertension"
@@ -96,6 +103,6 @@ def interpret_bp(sbp, dbp):
         return "Stage 2 Hypertension"
 
 if st.button("Interpret Blood Pressure"):
-    st.success(f"BP Category: **{interpret_bp(sbp, dbp)}**")
+    st.success(f"Blood Pressure Category: **{interpret_bp(sbp, dbp)}**")
 
-st.caption("Educational tool — not a substitute for clinical judgment.")
+st.caption("⚕️ Educational tool — not a substitute for clinical judgment.")
