@@ -2,16 +2,17 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 
-# ======================================================
+# =====================================================
 # APP CONFIG
-# ======================================================
+# =====================================================
 st.set_page_config(page_title="KayKuks Pediatric App", layout="centered")
 
 st.title("🧒 KayKuks Pediatric Growth & BP App")
+st.write("WHO-based pediatric growth and blood pressure assessment")
 
-# ======================================================
+# =====================================================
 # LOAD WHO DATA
-# ======================================================
+# =====================================================
 @st.cache_data
 def load_data():
     return {
@@ -25,17 +26,17 @@ def load_data():
 
 data = load_data()
 
-# ======================================================
+# =====================================================
 # USER INPUT
-# ======================================================
-age = st.number_input("Age (years)", min_value=0.0, max_value=19.0, step=0.1)
+# =====================================================
+age = st.number_input("Age (years)", 0.0, 19.0, 5.0)
 sex = st.selectbox("Sex", ["Male", "Female"])
-height = st.number_input("Height (cm)", min_value=40.0, max_value=200.0)
-weight = st.number_input("Weight (kg)", min_value=2.0, max_value=150.0)
+height = st.number_input("Height (cm)", 40.0, 200.0)
+weight = st.number_input("Weight (kg)", 2.0, 150.0)
 
-# ======================================================
+# =====================================================
 # BMI
-# ======================================================
+# =====================================================
 def calculate_bmi(weight, height):
     return weight / ((height / 100) ** 2)
 
@@ -53,13 +54,12 @@ elif bmi < 30:
 else:
     st.error("Obese")
 
-# ======================================================
-# HEIGHT-FOR-AGE Z SCORE
-# ======================================================
+# =====================================================
+# HEIGHT FOR AGE (WHO Z SCORE)
+# =====================================================
 def get_height_zscore(age, sex, height):
     age_months = age * 12
 
-    # Select dataset
     if age < 2:
         df = data["boys_0_2"] if sex == "Male" else data["girls_0_2"]
     elif age < 5:
@@ -67,12 +67,16 @@ def get_height_zscore(age, sex, height):
     else:
         df = data["boys_5_19"] if sex == "Male" else data["girls_5_19"]
 
-    # Detect age column automatically
+    # Identify age column dynamically
     age_col = df.columns[0]
 
-    # Convert age column to numeric
-    df[age_col] = pd.to_numeric(df[age_col], errors="coerce")
-    df = df.dropna(subset=[age_col])
+    # Convert age column safely
+    df[age_col] = (
+        df[age_col]
+        .astype(str)
+        .str.extract(r"(\d+\.?\d*)")[0]
+        .astype(float)
+    )
 
     # Find closest age
     df["diff"] = (df[age_col] - age_months).abs()
@@ -93,16 +97,16 @@ st.write(f"**Z-score:** {z:.2f}")
 if z < -3:
     st.error("Severe stunting")
 elif z < -2:
-    st.warning("Stunting")
+    st.warning("Stunted")
 elif z <= 2:
     st.success("Normal height")
 else:
     st.info("Tall for age")
 
-# ======================================================
+# =====================================================
 # BLOOD PRESSURE (SCREENING)
-# ======================================================
-st.subheader("🩺 Blood Pressure Assessment")
+# =====================================================
+st.subheader("🩺 Blood Pressure Screening")
 
 sbp = st.number_input("Systolic BP (mmHg)", 50, 200)
 dbp = st.number_input("Diastolic BP (mmHg)", 30, 150)
@@ -120,4 +124,4 @@ def interpret_bp(sbp, dbp):
 if st.button("Interpret Blood Pressure"):
     st.success(f"Blood Pressure Category: **{interpret_bp(sbp, dbp)}**")
 
-st.caption("⚕️ Educational tool — not for diagnostic use.")j
+st.caption("⚕️ Educational tool — not for diagnosis.")
