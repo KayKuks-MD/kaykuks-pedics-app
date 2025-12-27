@@ -1,89 +1,101 @@
 import streamlit as st
+import pandas as pd
+import numpy as np
 
-# ==============================
-# APP CONFIG
-# ==============================
 st.set_page_config(page_title="KayKuks Pediatric App", layout="centered")
 
-st.title("🧒 KayKuks Pediatric BMI & BP Calculator")
-st.write("A simple clinical tool for pediatric BMI and blood pressure assessment.")
+st.title("🧒 KayKuks Pediatric Growth & BP App")
 
 # ==============================
-# INPUT SECTION
+# LOAD WHO DATA
 # ==============================
-age = st.number_input("Age (years)", min_value=0.0, max_value=18.0, step=0.1)
+@st.cache_data
+def load_data():
+    return {
+        "boys_0_2": pd.read_csv("hfa_boys_0_2.csv"),
+        "girls_0_2": pd.read_csv("hfa_girls_0_2.csv"),
+        "boys_2_5": pd.read_csv("hfa_boys_2_5.csv"),
+        "girls_2_5": pd.read_csv("hfa_girls_2_5.csv"),
+        "boys_5_19": pd.read_csv("hfa_boys_5_19.csv"),
+        "girls_5_19": pd.read_csv("hfa_girls_5_19.csv"),
+    }
+
+data = load_data()
+
+# ==============================
+# INPUTS
+# ==============================
+age = st.number_input("Age (years)", 0.0, 19.0, 5.0)
 sex = st.selectbox("Sex", ["Male", "Female"])
-weight = st.number_input("Weight (kg)", min_value=0.0, step=0.1)
-height = st.number_input("Height (cm)", min_value=0.0, step=0.1)
+height = st.number_input("Height (cm)", 40.0, 200.0)
+weight = st.number_input("Weight (kg)", 2.0, 150.0)
 
 # ==============================
-# BMI CALCULATION
+# BMI
 # ==============================
-def calculate_bmi(weight, height_cm):
-    height_m = height_cm / 100
-    return weight / (height_m ** 2)
+def calc_bmi(w, h):
+    return w / ((h / 100) ** 2)
 
-st.subheader("📊 BMI Result")
+bmi = calc_bmi(weight, height)
+st.subheader("📊 BMI")
+st.write(f"**BMI:** {bmi:.2f}")
 
-if st.button("Calculate BMI"):
-    if height > 0 and weight > 0:
-        bmi = calculate_bmi(weight, height)
-        st.success(f"**BMI: {bmi:.2f} kg/m²**")
+# ==============================
+# HEIGHT-FOR-AGE Z SCORE
+# ==============================
+def get_hfa_z(age, sex, height):
+    age_months = int(age * 12)
 
-        if bmi < 18.5:
-            st.info("Underweight")
-        elif 18.5 <= bmi < 25:
-            st.success("Normal weight")
-        elif 25 <= bmi < 30:
-            st.warning("Overweight")
-        else:
-            st.error("Obese")
+    if age < 2:
+        df = data["boys_0_2"] if sex == "Male" else data["girls_0_2"]
+    elif age < 5:
+        df = data["boys_2_5"] if sex == "Male" else data["girls_2_5"]
     else:
-        st.error("Please enter valid height and weight.")
+        df = data["boys_5_19"] if sex == "Male" else data["girls_5_19"]
+
+    row = df[df["Age"] == age_months]
+
+    if row.empty:
+        return None
+
+    L, M, S = row.iloc[0]["L"], row.iloc[0]["M"], row.iloc[0]["S"]
+    z = ((height / M) ** L - 1) / (L * S)
+    return z
+
+z = get_hfa_z(age, sex, height)
+
+if z is not None:
+    st.subheader("📏 Height-for-Age Z-Score")
+    st.write(f"Z-score: **{z:.2f}**")
+
+    if z < -3:
+        st.error("Severe stunting")
+    elif z < -2:
+        st.warning("Stunted")
+    elif z <= 2:
+        st.success("Normal height")
+    else:
+        st.info("Tall for age")
 
 # ==============================
-# PEDIATRIC BLOOD PRESSURE
+# BP (Simplified)
 # ==============================
+st.subheader("🩺 Blood Pressure (Screening)")
 
-st.header("🩺 Pediatric Blood Pressure Assessment")
+sbp = st.number_input("Systolic BP (mmHg)", 50, 200)
+dbp = st.number_input("Diastolic BP (mmHg)", 30, 150)
 
-sbp = st.number_input("Systolic BP (mmHg)", min_value=50, max_value=200)
-dbp = st.number_input("Diastolic BP (mmHg)", min_value=30, max_value=150)
-
-# Simplified BP Reference (educational)
-BP_REFERENCE = {
-    "male": {
-        "normal": {"sbp": 90, "dbp": 60},
-        "elevated": {"sbp": 95, "dbp": 80},
-        "stage1": {"sbp": 120, "dbp": 80},
-        "stage2": {"sbp": 140, "dbp": 90},
-    },
-    "female": {
-        "normal": {"sbp": 90, "dbp": 60},
-        "elevated": {"sbp": 95, "dbp": 80},
-        "stage1": {"sbp": 120, "dbp": 80},
-        "stage2": {"sbp": 140, "dbp": 90},
-    },
-}
-
-def interpret_bp(sex, sbp, dbp):
-    ref = BP_REFERENCE[sex.lower()]
-
-    if sbp < ref["normal"]["sbp"] and dbp < ref["normal"]["dbp"]:
-        return "Normal Blood Pressure"
-    elif sbp < ref["elevated"]["sbp"] or dbp < ref["elevated"]["dbp"]:
-        return "Elevated Blood Pressure"
-    elif sbp < ref["stage1"]["sbp"] or dbp < ref["stage1"]["dbp"]:
+def interpret_bp(sbp, dbp):
+    if sbp < 90 and dbp < 60:
+        return "Normal"
+    elif sbp < 120 and dbp < 80:
+        return "Elevated"
+    elif sbp < 130 or dbp < 80:
         return "Stage 1 Hypertension"
     else:
         return "Stage 2 Hypertension"
 
 if st.button("Interpret Blood Pressure"):
-    bp_result = interpret_bp(sex, sbp, dbp)
-    st.success(f"🩺 Blood Pressure Category: **{bp_result}**")
+    st.success(f"BP Category: **{interpret_bp(sbp, dbp)}**")
 
-# ==============================
-# FOOTER
-# ==============================
-st.markdown("---")
-st.caption("⚕️ Educational use only. Not a substitute for clinical judgment.")
+st.caption("Educational tool — not a substitute for clinical judgment.")
