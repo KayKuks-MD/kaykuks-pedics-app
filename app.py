@@ -20,6 +20,7 @@ if st.button("Calculate BMI"):
 
         st.success(f"**BMI: {bmi:.2f} kg/m²**")
 
+        # Simple interpretation (not percentile-based yet)
         if bmi < 18.5:
             st.info("Underweight")
         elif 18.5 <= bmi < 25:
